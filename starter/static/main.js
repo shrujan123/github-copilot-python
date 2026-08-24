@@ -6,6 +6,7 @@ let elapsedSeconds = 0;
 let timerInterval = null;
 let scoreSubmitted = false;
 let currentGameId = '';
+let inputValidationVersion = 0;
 const DARK_MODE_KEY = 'sudoku_dark_mode';
 
 function applyDarkMode(enabled) {
@@ -131,6 +132,41 @@ function resetTimer() {
   updateTimerDisplay();
 }
 
+function getCurrentBoard() {
+  const inputs = document.getElementById('sudoku-board').getElementsByTagName('input');
+  const board = [];
+  for (let i = 0; i < SIZE; i++) {
+    board[i] = [];
+    for (let j = 0; j < SIZE; j++) {
+      const value = inputs[i * SIZE + j].value;
+      board[i][j] = value ? parseInt(value, 10) : 0;
+    }
+  }
+  return board;
+}
+
+async function validateInputCell(input) {
+  if (input.disabled) return;
+
+  const value = input.value;
+  input.classList.remove('incorrect');
+  if (!value) return;
+
+  const version = ++inputValidationVersion;
+  const row = parseInt(input.dataset.row, 10);
+  const col = parseInt(input.dataset.col, 10);
+  const res = await fetch('/check', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({board: getCurrentBoard()})
+  });
+  const data = await res.json();
+  if (version !== inputValidationVersion || input.value !== value || input.disabled) return;
+
+  const incorrect = new Set(data.incorrect.map(x => x[0] * SIZE + x[1]));
+  input.classList.toggle('incorrect', incorrect.has(row * SIZE + col));
+}
+
 function createBoardElement() {
   const boardDiv = document.getElementById('sudoku-board');
   boardDiv.innerHTML = '';
@@ -144,9 +180,15 @@ function createBoardElement() {
       input.className = 'sudoku-cell';
       input.dataset.row = i;
       input.dataset.col = j;
+      const blockRow = Math.floor(i / 3);
+      const blockCol = Math.floor(j / 3);
+      input.dataset.blockTone = (blockRow + blockCol) % 2 === 0 ? 'base' : 'alternate';
       input.addEventListener('input', (e) => {
         const val = e.target.value.replace(/[^1-9]/g, '');
         e.target.value = val;
+        validateInputCell(e.target).catch(() => {
+          e.target.classList.remove('incorrect');
+        });
       });
       rowDiv.appendChild(input);
     }
