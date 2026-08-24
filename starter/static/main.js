@@ -49,9 +49,11 @@ function getDifficultyLabel() {
 }
 
 function computeGameId() {
-  // simple string representation of puzzle + difficulty
   try {
-    return puzzle.flat().join(',') + '|' + (document.getElementById('difficulty')?.value || '35');
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random()}`;
   } catch (e) {
     return String(Date.now());
   }
@@ -60,14 +62,28 @@ function computeGameId() {
 function loadLeaderboard() {
   try {
     const raw = localStorage.getItem('sudoku_leaderboard') || '[]';
-    return JSON.parse(raw);
+    const entries = JSON.parse(raw);
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => ({
+        name: String(entry.name || 'Player'),
+        time: Number(entry.time),
+        difficulty: String(entry.difficulty || 'Medium'),
+        hints: Number.isFinite(Number(entry.hints)) ? Number(entry.hints) : 0,
+        gameId: String(entry.gameId || '')
+      }))
+      .filter((entry) => Number.isFinite(entry.time) && entry.time >= 0)
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 10);
   } catch (e) {
     return [];
   }
 }
 
 function saveLeaderboard(list) {
-  localStorage.setItem('sudoku_leaderboard', JSON.stringify(list));
+  const fastest = list.slice().sort((a, b) => a.time - b.time).slice(0, 10);
+  localStorage.setItem('sudoku_leaderboard', JSON.stringify(fastest));
 }
 
 function renderLeaderboard() {
@@ -78,23 +94,25 @@ function renderLeaderboard() {
     container.innerHTML = '<p>No scores yet.</p>';
     return;
   }
-  let html = '<table><thead><tr><th>Rank</th><th>Time</th><th>Difficulty</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Rank</th><th>Player</th><th>Time</th><th>Difficulty</th><th>Hints Used</th></tr></thead><tbody>';
   for (let i = 0; i < lb.length; i++) {
     const e = lb[i];
-    html += `<tr><td>${i+1}</td><td>${formatTime(e.time)}</td><td>${e.difficulty}</td></tr>`;
+    const safeName = e.name.replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[character]));
+    html += `<tr><td>${i + 1}</td><td>${safeName}</td><td>${formatTime(e.time)}</td><td>${e.difficulty}</td><td>${e.hints}</td></tr>`;
   }
   html += '</tbody></table>';
   container.innerHTML = html;
 }
 
-function addScore(timeSeconds, difficultyLabel) {
+function addScore(name, timeSeconds, difficultyLabel, hintCount) {
   const gameId = currentGameId || computeGameId();
   const last = localStorage.getItem('sudoku_last_submitted_game');
-  if (last === gameId) return false; // prevent duplicate submission for same game
+  if (scoreSubmitted || last === gameId) return false;
   let lb = loadLeaderboard();
-  lb.push({time: timeSeconds, difficulty: difficultyLabel, gameId});
+  lb.push({name, time: timeSeconds, difficulty: difficultyLabel, hints: hintCount, gameId});
   lb.sort((a, b) => a.time - b.time);
-  // keep first occurrence per gameId
   const seen = new Set();
   const unique = [];
   for (const e of lb) {
@@ -274,18 +292,15 @@ async function checkSolution() {
     }
   }
   if (incorrect.size === 0) {
-    // stop timer and show final time
     stopTimer();
     msg.style.color = '#388e3c';
     msg.innerText = `Congratulations! You solved it! Time: ${formatTime(elapsedSeconds)}`;
-    // submit score if not already submitted for this game
     const diffLabel = getDifficultyLabel();
-    // ensure we don't add a score when incorrect or duplicate
     if (!scoreSubmitted) {
-      const added = addScore(elapsedSeconds, diffLabel);
-      if (added) {
-        // optionally show a small confirmation
-        console.log('Score added to leaderboard');
+      const enteredName = window.prompt('Enter your name for the leaderboard:');
+      const playerName = enteredName ? enteredName.trim() : '';
+      if (playerName) {
+        addScore(playerName, elapsedSeconds, diffLabel, hintsUsed);
       }
     }
   } else {
