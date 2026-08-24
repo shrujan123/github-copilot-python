@@ -9,9 +9,26 @@
   <h1>Sudoku Game</h1>
   <div id="sudoku-board"></div>
   <div class="controls">
+    <label for="difficulty">Difficulty:</label>
+    <select id="difficulty">
+      <option value="45">Easy</option>
+      <option value="35" selected>Medium</option>
+      <option value="30">Hard</option>
+    </select>
+    <label class="toggle">
+      <input type="checkbox" id="dark-mode-toggle">
+      <span>Dark Mode</span>
+    </label>
+    <span id="timer">00:00</span>
     <button id="new-game">New Game</button>
     <button id="check-solution">Check Solution</button>
+    <button id="hint-button">Hint</button>
+    <span id="hint-count">Hints: 0</span>
     <span id="message"></span>
+  </div>
+  <div id="leaderboard-container">
+    <h2>Top 10 Leaderboard</h2>
+    <div id="leaderboard"></div>
   </div>
   <script src="/static/main.js"></script>
 </body>
